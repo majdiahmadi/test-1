@@ -1,14 +1,27 @@
+# Local Python virtual environments
 .venv/
+
+# Generated Python caches
 __pycache__/
-*.pyc
+*.py[cod]
 .pytest_cache/
 
+# Packaging output
+*.egg-info/
+build/
+dist/
+
+# API credentials and local configuration
 .env
 .env.*
 !.env.example
 
+# Local databases
 *.db
 *.sqlite
 *.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
 
+# Editor-specific local settings
 .vscode/
