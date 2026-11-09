@@ -1,0 +1,42 @@
+"""Start our first specialized Vigilance agent."""
+
+import os
+
+from openai import OpenAI
+
+from vigil.triage_agent import TriageAgent
+
+
+def main() -> None:
+    api_key = os.getenv("NVIDIA_API_KEY")
+    model = os.getenv("VIGIL_MODEL")
+
+    if not api_key:
+        raise SystemExit("NVIDIA_API_KEY is not set in this terminal.")
+    if not model:
+        raise SystemExit("VIGIL_MODEL is not set in this terminal.")
+
+    client = OpenAI(
+        base_url="https://integrate.api.nvidia.com/v1",
+        api_key=api_key,
+        timeout=60.0,
+        max_retries=1,
+    )
+
+    agent = TriageAgent(client=client, model=model)
+    task = "Investigate the synthetic SSH alert using the available tool."
+
+    try:
+        report = agent.run(task)
+    except Exception as exc:
+        raise SystemExit(
+            f"Triage stopped ({type(exc).__name__}). "
+            "Check your API settings, model tool support, and network."
+        ) from None
+
+    print("\nTriage report:\n")
+    print(report)
+
+
+if __name__ == "__main__":
+    main()

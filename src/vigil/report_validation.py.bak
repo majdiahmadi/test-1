@@ -1,0 +1,83 @@
+"""Reject malformed or evidence-inconsistent demo investigation reports."""
+
+import json
+from typing import Any
+
+from jsonschema import Draft202012Validator
+
+from vigil.report_schema import REPORT_SCHEMA
+
+
+MAX_REPORT_CHARACTERS = 16000
+
+
+class ReportValidationError(ValueError):
+    """A model's report was not safe to accept as structured evidence."""
+
+
+def validate_json_report(
+    raw_report: str,
+    alert: dict[str, Any],
+    playbook: dict[str, Any],
+) -> dict[str, Any]:
+    """Return a validated report, or explain why we rejected it."""
+
+    if not isinstance(raw_report, str) or len(raw_report) > MAX_REPORT_CHARACTERS:
+        raise ReportValidationError("Report must be JSON text of reasonable length.")
+
+    try:
+        report = json.loads(raw_report)
+    except json.JSONDecodeError:
+        raise ReportValidationError("Model response is not valid JSON.") from None
+
+    errors = list(Draft202012Validator(REPORT_SCHEMA).iter_errors(report))
+    if errors:
+        first = sorted(errors, key=lambda item: (list(map(str, item.path)), item.message))[0]
+        location = ".".join(str(part) for part in first.path) or "report"
+        raise ReportValidationError(
+            f"JSON report does not match our schema at {location}: {first.message}"
+        )
+
+    for key in ("alert_id", "source", "source_ip", "authorization_status"):
+        if report[key] != alert[key]:
+            raise ReportValidationError(f"Report {key} does not match the alert evidence.")
+
+    # This demo alert does not contain enough data to confirm severity or access.
+    if report["severity"] != "undetermined" or report["confidence"] != "low":
+        raise ReportValidationError(
+            "Demo evidence requires severity 'undetermined' and confidence 'low'."
+        )
+
+    expected_events = {
+        event["event_id"]: {
+            "event_id": event["event_id"],
+            "event_type": event["event_type"],
+            "count": event.get("count"),
+            "username": event.get("username"),
+        }
+        for event in alert["events"]
+    }
+    actual_events = {event["event_id"]: event for event in report["events"]}
+    if (
+        len(actual_events) != len(report["events"])
+        or actual_events != expected_events
+    ):
+        raise ReportValidationError("Report events do not match the original alert.")
+
+    expected_step_ids = {step["step_id"] for step in playbook["steps"]}
+    received_steps = {
+        step["step_id"]: step for step in report["playbook_steps"]
+    }
+    if (
+        len(received_steps) != len(report["playbook_steps"])
+        or set(received_steps) != expected_step_ids
+    ):
+        raise ReportValidationError("Report must include each playbook step exactly once.")
+
+    for step_id in ("SSH-03", "SSH-04"):
+        if received_steps[step_id]["status"] != "NOT CHECKED":
+            raise ReportValidationError(
+                f"{step_id} must be NOT CHECKED: required evidence is missing."
+            )
+
+    return report

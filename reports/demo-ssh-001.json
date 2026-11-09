@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "alert_id": "demo-ssh-001",
+  "source": "synthetic_fixture",
+  "source_ip": "192.0.2.10",
+  "authorization_status": "unknown",
+  "severity": "undetermined",
+  "confidence": "low",
+  "events": [
+    {
+      "event_id": "log-001",
+      "event_type": "ssh_login_failed",
+      "count": 15,
+      "username": null
+    },
+    {
+      "event_id": "log-002",
+      "event_type": "ssh_login_success",
+      "count": null,
+      "username": "admin"
+    }
+  ],
+  "assessment": "Observed facts: 15 failed SSH login events (log-001) and 1 successful SSH login for user 'admin' (log-002) were recorded from source IP 192.0.2.10. The data is synthetic. Possible interpretation: the failed logins could indicate credential guessing activity. However, the successful login alone does not prove unauthorized access or compromise. The temporal order of events is unknown due to missing timestamps.",
+  "uncertainties": [
+    "No timestamps are available, so the order of failed and successful login events cannot be determined.",
+    "Authorization status for the successful login is unknown; it is not known whether the admin login was approved or expected."
+  ],
+  "playbook_steps": [
+    {
+      "step_id": "SSH-01",
+      "status": "CHECKED",
+      "finding": "Alert ID demo-ssh-001 recorded; data source is synthetic_fixture."
+    },
+    {
+      "step_id": "SSH-02",
+      "status": "CHECKED",
+      "finding": "Events listed: log-001 (ssh_login_failed, count 15), log-002 (ssh_login_success, username admin)."
+    },
+    {
+      "step_id": "SSH-03",
+      "status": "NOT CHECKED",
+      "finding": "No timestamps present in evidence; event order cannot be confirmed."
+    },
+    {
+      "step_id": "SSH-04",
+      "status": "NOT CHECKED",
+      "finding": "Authorization status unknown; no post-login activity evidence available."
+    },
+    {
+      "step_id": "SSH-05",
+      "status": "CHECKED",
+      "finding": "Facts, possible interpretations, missing data, and next steps summarized in assessment and recommended_actions."
+    }
+  ],
+  "recommended_actions": [
+    "Obtain timestamped logs to establish event chronology.",
+    "Verify whether the admin account login from 192.0.2.10 was authorized.",
+    "Check for any post-login activity (commands, file access, lateral movement).",
+    "Review authentication policies and consider multi-factor authentication for admin accounts."
+  ],
+  "actions_taken": []
+}

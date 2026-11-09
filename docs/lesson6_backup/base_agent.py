@@ -1,0 +1,110 @@
+"""A reusable agent loop for OpenAI-compatible chat-completions APIs."""
+
+import json
+from collections.abc import Callable
+from typing import Any
+
+from openai import OpenAI
+
+from vigil.model_manager import ModelManager
+
+
+class BaseAgent:
+    """Manage LLM requests and execute only explicitly approved tools."""
+
+    def __init__(
+        self,
+        name: str,
+        instructions: str,
+        model: str,
+        client: OpenAI,
+        tool_specs: list[dict[str, Any]],
+        tool_functions: dict[str, Callable[..., Any]],
+        max_rounds: int = 4,
+    ) -> None:
+        if max_rounds < 2:
+            raise ValueError("max_rounds must be at least 2")
+
+        self.name = name
+        self.instructions = instructions
+        self.model_manager = ModelManager(client=client, model=model)
+        self.tool_specs = tool_specs
+        self.tool_functions = tool_functions
+        self.max_rounds = max_rounds
+
+    def _execute_tool(self, name: str, raw_arguments: str) -> dict[str, Any]:
+        """Run one allowed Python function and return a JSON-safe result."""
+        function = self.tool_functions.get(name)
+        if function is None:
+            return {"error": "Requested tool is not allowed"}
+
+        try:
+            arguments = json.loads(raw_arguments or "{}")
+        except json.JSONDecodeError:
+            return {"error": "Tool arguments must be valid JSON"}
+
+        if not isinstance(arguments, dict):
+            return {"error": "Tool arguments must be a JSON object"}
+
+        try:
+            return {"result": function(**arguments)}
+        except (TypeError, ValueError):
+            return {"error": "Tool arguments are invalid"}
+        except Exception:
+            return {"error": "Approved tool failed to execute"}
+
+    def run(self, task: str) -> str:
+        """Keep asking the LLM until it returns a report or reaches the limit."""
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self.instructions},
+            {"role": "user", "content": task},
+        ]
+
+        for round_number in range(1, self.max_rounds + 1):
+            print(f"\n{self.name} agent round {round_number}")
+
+            completion = self.model_manager.create_completion(
+                messages=messages,
+                tools=self.tool_specs,
+            )
+
+            assistant_message = completion.choices[0].message
+            tool_calls = assistant_message.tool_calls or []
+
+            if not tool_calls:
+                if assistant_message.content:
+                    return assistant_message.content
+                raise RuntimeError("The model returned neither text nor a tool call")
+
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": assistant_message.content,
+                    "tool_calls": [
+                        {
+                            "id": call.id,
+                            "type": "function",
+                            "function": {
+                                "name": call.function.name,
+                                "arguments": call.function.arguments,
+                            },
+                        }
+                        for call in tool_calls
+                    ],
+                }
+            )
+
+            for call in tool_calls:
+                tool_name = call.function.name
+                print(f"Tool requested: {tool_name}")
+                result = self._execute_tool(tool_name, call.function.arguments)
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": json.dumps(result),
+                    }
+                )
+
+        raise RuntimeError("Agent reached the round limit without a final report")

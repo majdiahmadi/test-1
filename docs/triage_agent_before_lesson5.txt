@@ -1,0 +1,49 @@
+"""Vigilance's first specialized agent: Triage."""
+
+from openai import OpenAI
+
+from vigil.base_agent import BaseAgent
+from vigil.demo_tools import get_demo_alert
+
+
+TRIAGE_INSTRUCTIONS = """
+You are Vigilance's Triage Agent in a learning demonstration.
+Before reporting specific incident facts, call get_demo_alert.
+The tool returns synthetic SSH evidence, not real Wazuh logs.
+Separate observed facts, reasonable interpretations, uncertainties,
+and recommended next investigation steps.
+Do not invent timestamps, commands, compromise, or authorization status.
+Do not claim a successful login proves malicious activity.
+Do not suggest you performed containment or changed any systems.
+"""
+
+
+class TriageAgent(BaseAgent):
+    """Use BaseAgent's loop with Triage instructions and read-only tools."""
+
+    def __init__(self, client: OpenAI, model: str) -> None:
+        tool_specs = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_demo_alert",
+                    "description": "Read one synthetic SSH security alert and its events.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        ]
+
+        super().__init__(
+            name="Triage",
+            instructions=TRIAGE_INSTRUCTIONS,
+            model=model,
+            client=client,
+            tool_specs=tool_specs,
+            tool_functions={"get_demo_alert": get_demo_alert},
+            max_rounds=4,
+        )

@@ -1,0 +1,73 @@
+"""Run the existing Triage Agent, then require a validated JSON report."""
+
+from typing import Any
+
+from openai import OpenAI
+
+from vigil.demo_tools import get_demo_alert
+from vigil.playbooks import get_investigation_playbook
+from vigil.report_validation import validate_json_report
+from vigil.triage_agent import TriageAgent
+
+
+JSON_REPORT_INSTRUCTIONS = """
+After calling the playbook and alert tools, your FINAL answer must be ONE JSON
+object only. Do not add Markdown, ``` fences, or text before or after JSON.
+Use exactly these keys: schema_version, alert_id, source, source_ip,
+authorization_status, severity, confidence, events, assessment, uncertainties,
+playbook_steps, recommended_actions, actions_taken.
+Use schema_version "1.0". Set severity to "undetermined" and confidence to
+"low" because the demo evidence is incomplete. In events, include every
+observed event exactly once, using event_id, event_type, count, username.
+Use null for count or username when that field was absent in the evidence.
+In playbook_steps, include every step SSH-01 to SSH-05 exactly once, with
+step_id, status, finding. Status must be "CHECKED" or "NOT CHECKED".
+SSH-03 and SSH-04 must be "NOT CHECKED" because timestamps, authorization,
+and post-login evidence are missing. Never invent timestamps or event order.
+Explain uncertainty in plain English. Recommendations are NOT completed actions.
+Return actions_taken as an empty list [] because you changed no systems.
+
+
+IMPORTANT JSON FORMAT RULES:
+
+The following fields MUST be JSON arrays:
+- uncertainties: an array of separate strings.
+- recommended_actions: an array of separate strings.
+- events: an array of objects.
+- playbook_steps: an array of objects.
+- actions_taken: an empty array [].
+
+The assessment field MUST be a string.
+
+CORRECT uncertainties example:
+"uncertainties": [
+  "Event timestamps are missing.",
+  "The authorization status is unknown.",
+  "Post-login activity is not available."
+]
+
+WRONG uncertainties example:
+"uncertainties": "Event timestamps are missing. Authorization is unknown."
+
+Never combine all uncertainties into one string.
+Do not invent missing evidence.
+Before returning your final answer, check that every
+field has the correct JSON data type.
+"""
+
+
+class StructuredTriageAgent(TriageAgent):
+    """Add a JSON final-answer contract without replacing the older agent."""
+
+    def __init__(self, client: OpenAI, model: str) -> None:
+        super().__init__(client=client, model=model, use_playbook=True)
+        self.instructions = self.instructions.rstrip() + "\n" + JSON_REPORT_INSTRUCTIONS
+
+    def run_structured(self, task: str) -> dict[str, Any]:
+        """Get a report from the LLM, then verify it using Python."""
+        raw_report = self.run(task)
+        return validate_json_report(
+            raw_report,
+            alert=get_demo_alert(),
+            playbook=get_investigation_playbook("ssh-bruteforce-v1"),
+        )

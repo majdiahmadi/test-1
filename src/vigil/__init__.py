@@ -1,0 +1,1 @@
+"""Vigilance's reusable AI agent components (learning version)."""
