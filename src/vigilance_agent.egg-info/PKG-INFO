@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: vigilance-agent
+Version: 0.1.0
+Summary: VIGIL SOC AI Agent Framework
+Requires-Python: >=3.12
+Requires-Dist: openai>=1.0.0
+Requires-Dist: jsonschema>=4.0.0
